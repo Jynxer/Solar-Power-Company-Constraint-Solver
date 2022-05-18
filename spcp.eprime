@@ -1,0 +1,74 @@
+$ Language declaration
+language ESSENCE' 1.0
+
+$ Declaring parameters
+given numPanels : int
+given panelPower : matrix indexed by [int(1..numPanels)] of int
+given panelArea : matrix indexed by [int(1..numPanels)] of int
+
+given numBuilds : int
+given buildPower : matrix indexed by [int(1..numBuilds)] of int
+given buildArea : matrix indexed by [int(1..numBuilds)] of int
+
+given numWorkers : int
+given workercapacity : matrix indexed by [int(1..numWorkers)] of int
+given workercost : matrix indexed by [int(1..numWorkers)] of int
+
+given budgetPerDay : int
+given numDays : int
+
+$ Declaring domains
+letting PANELS be domain int(1..numPanels)
+letting BUILDS be domain int(1..numBuilds)
+letting WORKERS be domain int(1..numWorkers)
+letting DAYS be domain int(1..numDays)
+
+$ Declaring non-decision variables
+letting maxEnergyTransmission = sum panel : PANELS . panelPower[panel]
+letting minEnergyTransmission = max(buildPower) * -1
+letting maxTotalSquareEnergyTransmission = max((sum panel : PANELS . (panelPower[panel] ** 2)), (sum building : BUILDS . (buildPower[building] ** 2)))
+
+$ Declaring decision variables
+find buildingAssignment : matrix indexed by [PANELS] of BUILDS
+find workerAssignment : matrix indexed by [PANELS] of WORKERS
+find dayAssignment : matrix indexed by [PANELS] of DAYS
+find isWorking : matrix indexed by [WORKERS, DAYS] of int(0..1)
+find energyTransmission : matrix indexed by [BUILDS] of int(minEnergyTransmission..maxEnergyTransmission)
+find totalSquareEnergyTransmission : int(0..maxTotalSquareEnergyTransmission)
+
+ $ Declaring the branching order
+branching on [ buildingAssignment, energyTransmission, totalSquareEnergyTransmission, dayAssignment, workerAssignment, isWorking ]
+
+$ Delcaring the goal of the solution
+minimising totalSquareEnergyTransmission
+
+$ Declaring constraints
+such that
+
+$ Add up the panel area for each building and assert that it is less than the building area
+forAll building : BUILDS .
+  buildArea[building] >= (sum panel : PANELS . ((buildingAssignment[panel] = building) * panelArea[panel])),
+
+$ Find the amount of energy shared between each building and the grid
+forAll building : BUILDS .
+  energyTransmission[building] = ((sum panel : PANELS . ((buildingAssignment[panel] = building) * panelPower[panel])) - buildPower[building]),
+
+$ Calculate the total square of building energy transmissions
+totalSquareEnergyTransmission = sum building : BUILDS . (energyTransmission[building] ** 2),
+
+$ Add up the worker daily area and assert that it is less than that worker's capacity
+forAll day : DAYS .
+  forAll worker : WORKERS .
+    workercapacity[worker] >= (sum panel : PANELS . ((workerAssignment[panel] = worker) * (dayAssignment[panel] = day)) * panelArea[panel]),
+
+$ Fill in isWorking matrix with which workers worked on which days
+forAll day : DAYS .
+  forAll worker : WORKERS .
+    isWorking[worker, day] = (exists panel : PANELS . ((dayAssignment[panel] = day) * (workerAssignment[panel] = worker)) = 1),
+
+$ For each day add up the sum of worker salaries that day and assert that it is less than the daily budget
+forAll day : DAYS .
+  budgetPerDay >= (sum worker : WORKERS . (isWorking[worker, day] * workercost[worker])),
+
+$ Boolean constant to avoid thinking about when to stop using comma delimiter
+true
